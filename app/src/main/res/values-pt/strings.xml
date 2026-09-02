@@ -1,0 +1,150 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="app_name">Kitsune Boot</string>
+    <string name="app_title">Criador de Boot Animation</string>
+    <string name="app_subtitle">Converta vídeos em arquivos bootanimation.zip para Android</string>
+
+    <!-- Header Actions -->
+    <string name="action_inspect_zip">Inspecionar ZIP</string>
+    <string name="action_share">Compartilhar</string>
+    <string name="detect_device_res_button">Tela do Aparelho</string>
+
+    <!-- Step 1: Video Selection & Trimming -->
+    <string name="step_1_title">Vídeo de Origem</string>
+    <string name="step_1_subtitle">Selecione, corte e oriente o clipe de vídeo</string>
+    <string name="choose_video_button">Escolher Arquivo de Vídeo</string>
+    <string name="change_video_button">Trocar Vídeo</string>
+    <string name="drop_video_hint">Toque para selecionar um vídeo (MP4, WebM, MKV)</string>
+    <string name="trim_start_label">Início: %1$.1fs</string>
+    <string name="trim_end_label">Fim: %1$.1fs</string>
+    <string name="trim_duration_badge">%1$.1fs</string>
+    <string name="rotation_title">Rotação do Vídeo</string>
+    <string name="rotation_0">0°</string>
+    <string name="rotation_90">90°</string>
+    <string name="rotation_180">180°</string>
+    <string name="rotation_270">270°</string>
+    <string name="error_select_video_first">Selecione um vídeo primeiro</string>
+
+    <!-- Step 2: Resolution & Presets -->
+    <string name="step_2_title">Resolução &amp; Exibição</string>
+    <string name="step_2_subtitle">Configure o tamanho da tela e as dimensões dos frames</string>
+    <string name="quick_presets">Predefinições Rápidas</string>
+    <string name="canvas_resolution_title">Resolução da Tela (desc.txt)</string>
+    <string name="canvas_width_label">Largura</string>
+    <string name="canvas_height_label">Altura</string>
+    <string name="sync_frame_resolution">Sincronizar resolução dos frames com a tela</string>
+    <string name="sync_frame_resolution_desc">Extrair frames exatamente na resolução da tela</string>
+    <string name="frame_scale_title">Escala dos Frames (% da Tela)</string>
+    <string name="frame_scale_desc">Reduza a resolução dos frames para economizar memória e evitar OOM</string>
+    <string name="scale_100">100% (Nativo)</string>
+    <string name="scale_75">75%</string>
+    <string name="scale_50">50% (Recomendado)</string>
+    <string name="scale_33">33%</string>
+    <string name="scale_25">25%</string>
+    <string name="frame_scale_result">%1$d%% de escala (%2$d × %3$d px)</string>
+    <string name="custom_frame_resolution_switch">Dimensões manuais em pixels</string>
+    <string name="advanced_frame_resolution">Dimensões Personalizadas dos Frames</string>
+    <string name="frame_width_label">Largura do Frame</string>
+    <string name="frame_height_label">Altura do Frame</string>
+    <string name="resolution_range_hint">100&#8211;8000 px</string>
+    <string name="px_unit">px</string>
+
+    <!-- Step 3: Playback & Animation Loop -->
+    <string name="step_3_title">Reprodução &amp; Loops</string>
+    <string name="step_3_subtitle">Taxa de quadros, modo de escala e repetições</string>
+    <string name="target_fps_label">FPS Alvo</string>
+    <string name="fps_range_hint">1&#8211;120</string>
+    <string name="fps_preset_24">24 FPS</string>
+    <string name="fps_preset_30">30 FPS</string>
+    <string name="fps_preset_60">60 FPS</string>
+    <string name="part_type_label">Tipo de Parte</string>
+    <string name="part_type_p">p (Interrompível)</string>
+    <string name="part_type_p_title">p - Interrompível</string>
+    <string name="part_type_p_desc">Interrompe a reprodução assim que o sistema terminar de iniciar.</string>
+    <string name="part_type_c">c (Completo)</string>
+    <string name="part_type_c_title">c - Ciclo Completo</string>
+    <string name="part_type_c_desc">Reproduz o ciclo completo até o fim antes de finalizar.</string>
+    <string name="loop_count_label">Repetições (0 = infinito)</string>
+    <string name="pause_count_label">Quadros de Pausa</string>
+    <string name="scaling_mode_title">Modo de Escala</string>
+    <string name="scaling_fit_center">Ajustar (Letterbox)</string>
+    <string name="scaling_center_crop">Preencher (Cortar)</string>
+    <string name="scaling_stretch">Esticar</string>
+
+    <!-- Multi-Part Mode -->
+    <string name="multi_part_switch_title">Animação em Múltiplas Partes (Intro + Loop)</string>
+    <string name="multi_part_desc" tools:ignore="Typos">Divide em part0 (Introdução, 1 vez) e part1 (Loop Contínuo).</string>
+    <string name="split_point_label">Ponto de Divisão: %1$.1fs (Parte 0: %2$.1fs – %3$.1fs | Parte 1: %4$.1fs – %5$.1fs)</string>
+    <string name="part0_badge">Parte 0 (Intro)</string>
+    <string name="part1_badge">Parte 1 (Loop)</string>
+    <string name="part0_loop_label">Repetição Parte 0 (1=uma vez)</string>
+    <string name="part1_loop_label">Repetição Parte 1 (0=infinito)</string>
+
+    <!-- Step 4: Formatting & Quality -->
+    <string name="step_4_title">Formato &amp; Cor de Fundo</string>
+    <string name="step_4_subtitle">Selecione a codificação das imagens e a cor das bordas</string>
+    <string name="image_format_title">Formato de Imagem</string>
+    <string name="format_png">PNG (Sem perdas)</string>
+    <string name="format_jpeg">JPEG (Compactado)</string>
+    <string name="jpeg_quality_label">Qualidade JPEG (%1$d%%)</string>
+    <string name="background_color_title">Cor de Fundo</string>
+    <string name="custom_hex_label">Código Hex Personalizado</string>
+    <string name="hex_error_hint">Deve estar no formato #RRGGBB</string>
+
+    <!-- Step 5: Export Type & Actions -->
+    <string name="step_5_title">Opções de Exportação</string>
+    <string name="step_5_subtitle">Empacotamento de módulo Root e metadados</string>
+    <string name="magisk_export_switch">Módulo Magisk / KernelSU</string>
+    <string name="magisk_export_desc">Gera um módulo ZIP instalável diretamente em gerenciadores Root</string>
+    <string name="magisk_module_name_label">Nome do Módulo</string>
+    <string name="magisk_module_author_label">Autor</string>
+    <string name="create_bootanimation_button">Gerar bootanimation.zip</string>
+    <string name="create_magisk_button">Gerar Módulo Magisk</string>
+    <string name="cancel_generation_button">Cancelar</string>
+    <string name="preview_button">Pré-visualizar</string>
+    <string name="error_check_form">Corrija os erros no formulário antes de continuar</string>
+    <string name="generation_starting">Inicializando geração&#8230;</string>
+    <string name="share_chooser_title">Compartilhar Boot Animation</string>
+    <string name="error_could_not_share">Não foi possível compartilhar o arquivo</string>
+
+    <!-- Preview Dialog -->
+    <string name="preview_dialog_title">Pré-visualização da Animação</string>
+    <string name="preview_loading">Gerando quadros de pré-visualização&#8230;</string>
+    <string name="preview_fps_label">Velocidade: %1$d FPS</string>
+    <string name="preview_frame_indicator">Quadro %1$d / %2$d</string>
+    <string name="play_preview">Reproduzir</string>
+    <string name="pause_preview">Pausar</string>
+    <string name="no_preview_frames">Nenhum quadro disponível para pré-visualização.</string>
+    <string name="close_button">Fechar</string>
+
+    <!-- ZIP Inspector Dialog -->
+    <string name="inspector_dialog_title">Inspetor de Boot Animation</string>
+    <string name="inspector_subtitle">Detalhes e configurações do arquivo</string>
+    <string name="inspector_file_size">Tamanho do arquivo: %1$.1f MB</string>
+    <string name="inspector_total_frames">%1$d quadros (%2$d partes)</string>
+    <string name="inspector_preview_label">Prévia do primeiro quadro</string>
+    <string name="inspector_module_badge">Módulo Root (Magisk)</string>
+    <string name="inspector_module_info">Módulo: %1$s • Autor: %2$s</string>
+    <string name="inspector_desc_resolution">Resolução: %1$d × %2$d @ %3$d FPS</string>
+    <string name="inspector_parts_title">Partes da Animação:</string>
+    <string name="inspector_part_item" tools:ignore="PluralsCandidate">Parte %1$s (%2$c): %3$d quadros | loop=%4$d, pausa=%5$d%6$s</string>
+    <string name="inspector_apply_button">Aplicar às Configurações</string>
+    <string name="scroll_left_button">Rolar para esquerda</string>
+    <string name="scroll_right_button">Rolar para direita</string>
+
+    <!-- Warnings -->
+    <string name="warning_bootloop_title">Risco de Bootloop</string>
+    <string name="warning_bootloop_message">A instalação de módulos ou boot animations personalizadas pode causar bootloop, especialmente se os parâmetros (resolução, formato ou taxa de quadros) forem configurados incorretamente ou de forma incompatível com o aparelho. Tenha sempre um método de recuperação ou modo de segurança acessível.</string>
+    <string name="warning_oom_dialog_title">Aviso: Risco de Falta de Memória (OOM >90MB)</string>
+    <string name="warning_oom_dialog_message">O arquivo bootanimation.zip gerado possui %1$.1f MB. Arquivos com mais de 90 MB podem causar problemas de falta de memória (Out Of Memory - OOM) e travamentos/bootloop durante a inicialização do Android. Recomendamos utilizar o formato JPEG ou reduzir a resolução caso enfrente problemas no boot.</string>
+    <string name="warning_oom_estimated_hint">Tamanho elevado (>90MB estimado). Pode causar erro de OOM no boot. Considere usar JPEG.</string>
+    <string name="inspector_oom_warning">Aviso: O arquivo ultrapassa 90 MB (%1$.1f MB) e pode causar erro de OOM durante o boot!</string>
+    <string name="dismiss_warning_button">Entendi</string>
+
+    <!-- About Dialog -->
+    <string name="action_about">Sobre</string>
+    <string name="about_dialog_title">Sobre o Kitsune Boot</string>
+    <string name="about_app_description">Criador de Boot Animation para Android</string>
+    <string name="about_copyright">Copyright &#169; 2026 Yervant</string>
+    <string name="about_license_title">Licença Pública Geral GNU v3.0 (GPLv3)</string>
+    <string name="about_license_body">Este programa é um software livre: você pode redistribuí-lo e/ou modificá-lo sob os termos da Licença Pública Geral GNU conforme publicada pela Free Software Foundation, versão 3 da Licença, ou (a seu critério) qualquer versão posterior.\n\nEste programa é distribuído na expectativa de ser útil, mas SEM QUALQUER GARANTIA; sem mesmo a garantia implícita de COMERCIALIZAÇÃO ou ADEQUAÇÃO A UM DETERMINADO PROPÓSITO. Consulte a Licença Pública Geral GNU para mais detalhes.</string>
+</resources>

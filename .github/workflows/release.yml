@@ -1,0 +1,156 @@
+name: Release - Build & Publish APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag Name (e.g. v1.0.0)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as Pre-release'
+        required: false
+        default: false
+        type: boolean
+      draft:
+        description: 'Create as Draft Release'
+        required: false
+        default: false
+        type: boolean
+      release_title:
+        description: 'Optional Custom Release Title'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Build & Publish Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java 21 LTS
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Android SDK & NDK
+        uses: android-actions/setup-android@v4
+
+      - name: Accept Android SDK Licenses & Set Environment
+        run: |
+          yes | sdkmanager --licenses || true
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Setup Keystore for Release Signing
+        if: env.KEYSTORE_BASE64 != ''
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "ORG_GRADLE_PROJECT_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> $GITHUB_ENV
+          echo "ORG_GRADLE_PROJECT_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> $GITHUB_ENV
+          echo "ORG_GRADLE_PROJECT_KEY_ALIAS=$KEY_ALIAS" >> $GITHUB_ENV
+          echo "ORG_GRADLE_PROJECT_KEY_PASSWORD=$KEY_PASSWORD" >> $GITHUB_ENV
+
+      - name: Assemble Release and Debug APKs
+        run: ./gradlew assembleRelease assembleDebug --stacktrace
+
+      - name: Prepare Release Artifacts & Checksums
+        id: prepare_artifacts
+        run: |
+          TAG="${{ github.ref_name }}"
+          if [ -z "$TAG" ] || [ "$TAG" = "main" ] || [ "$TAG" = "master" ]; then
+            TAG="${{ inputs.tag_name }}"
+          fi
+          if [ -z "$TAG" ]; then
+            TAG="v1.0.0"
+          fi
+
+          mkdir -p release_dist
+
+          for VARIANT in release debug; do
+            for ABI in arm64-v8a x86_64; do
+              SRC="app/build/outputs/apk/${VARIANT}/app-${ABI}-${VARIANT}.apk"
+              DST="release_dist/KitsuneBoot-${TAG}-${ABI}-${VARIANT}.apk"
+              if [ -f "$SRC" ]; then
+                cp "$SRC" "$DST"
+                (cd release_dist && sha256sum "$(basename "$DST")" > "$(basename "$DST").sha256")
+              else
+                echo "Error: $SRC not found!" >&2
+                exit 1
+              fi
+            done
+          done
+
+          cd release_dist
+          sha256sum *.apk > "KitsuneBoot-${TAG}-checksums.sha256"
+          cd ..
+
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Generate Release Body Note
+        id: release_notes
+        run: |
+          TAG="${{ steps.prepare_artifacts.outputs.tag }}"
+
+          cat << 'EOF' > release_body.md
+          ### KitsuneBoot Distribution Artifacts
+
+          | Artifact | Variant | Architecture | Size | SHA-256 Checksum |
+          | :--- | :--- | :--- | :--- | :--- |
+          EOF
+
+          for VARIANT in release debug; do
+            for ABI in arm64-v8a x86_64; do
+              FILE="release_dist/KitsuneBoot-${TAG}-${ABI}-${VARIANT}.apk"
+              FNAME="$(basename "$FILE")"
+              SIZE=$(du -h "$FILE" | cut -f1)
+              SHA=$(sha256sum "$FILE" | cut -d' ' -f1)
+              if [ "$VARIANT" = "release" ]; then
+                VAR_LABEL="**Release** (Optimized, R8)"
+              else
+                VAR_LABEL="**Debug** (Unstripped, Dev)"
+              fi
+              echo "| \`${FNAME}\` | ${VAR_LABEL} | \`${ABI}\` | \`${SIZE}\` | \`${SHA}\` |" >> release_body.md
+            done
+          done
+
+          cat << 'EOF' >> release_body.md
+
+          ### Target & Requirements
+          - **Minimum OS**: Android 10+ (API 29+)
+          - **Supported Architectures**: ARM64 (`arm64-v8a`), x86_64 (`x86_64`)
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          name: ${{ inputs.release_title != '' && inputs.release_title || format('KitsuneBoot {0}', steps.prepare_artifacts.outputs.tag) }}
+          tag_name: ${{ steps.prepare_artifacts.outputs.tag }}
+          body_path: release_body.md
+          generate_release_notes: true
+          draft: ${{ inputs.draft || false }}
+          prerelease: ${{ inputs.prerelease || contains(steps.prepare_artifacts.outputs.tag, '-alpha') || contains(steps.prepare_artifacts.outputs.tag, '-beta') || contains(steps.prepare_artifacts.outputs.tag, '-rc') }}
+          files: |
+            release_dist/KitsuneBoot-*.apk
+            release_dist/KitsuneBoot-*.sha256

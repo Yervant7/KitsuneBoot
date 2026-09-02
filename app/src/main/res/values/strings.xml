@@ -1,0 +1,150 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="app_name">Kitsune Boot</string>
+    <string name="app_title">Boot Animation Maker</string>
+    <string name="app_subtitle">Convert video to Android bootanimation.zip</string>
+
+    <!-- Header Actions -->
+    <string name="action_inspect_zip">Inspect ZIP</string>
+    <string name="action_share">Share</string>
+    <string name="detect_device_res_button">Device Screen</string>
+
+    <!-- Step 1: Video Selection & Trimming -->
+    <string name="step_1_title">Source Video</string>
+    <string name="step_1_subtitle">Select, trim, and orient your video clip</string>
+    <string name="choose_video_button">Choose Video File</string>
+    <string name="change_video_button">Change Video</string>
+    <string name="drop_video_hint">Tap to select video file (MP4, WebM, MKV)</string>
+    <string name="trim_start_label">Start: %1$.1fs</string>
+    <string name="trim_end_label">End: %1$.1fs</string>
+    <string name="trim_duration_badge">%1$.1fs</string>
+    <string name="rotation_title">Video Rotation</string>
+    <string name="rotation_0">0°</string>
+    <string name="rotation_90">90°</string>
+    <string name="rotation_180">180°</string>
+    <string name="rotation_270">270°</string>
+    <string name="error_select_video_first">Please select a video first</string>
+
+    <!-- Step 2: Resolution & Presets -->
+    <string name="step_2_title">Resolution &amp; Display</string>
+    <string name="step_2_subtitle">Configure display canvas and frame dimensions</string>
+    <string name="quick_presets">Quick Presets</string>
+    <string name="canvas_resolution_title">Display Resolution (desc.txt)</string>
+    <string name="canvas_width_label">Canvas Width</string>
+    <string name="canvas_height_label">Canvas Height</string>
+    <string name="sync_frame_resolution">Sync frame size with canvas</string>
+    <string name="sync_frame_resolution_desc">Extract frames at the exact display canvas resolution</string>
+    <string name="frame_scale_title">Frame Scale (% of Canvas)</string>
+    <string name="frame_scale_desc">Scale down frames to save memory and prevent OOM on boot</string>
+    <string name="scale_100">100% (Native)</string>
+    <string name="scale_75">75%</string>
+    <string name="scale_50">50% (Recommended)</string>
+    <string name="scale_33">33%</string>
+    <string name="scale_25">25%</string>
+    <string name="frame_scale_result">%1$d%% scale (%2$d × %3$d px)</string>
+    <string name="custom_frame_resolution_switch">Manual pixel dimensions</string>
+    <string name="advanced_frame_resolution">Custom Frame Dimensions</string>
+    <string name="frame_width_label">Frame Width</string>
+    <string name="frame_height_label">Frame Height</string>
+    <string name="resolution_range_hint">100&#8211;8000 px</string>
+    <string name="px_unit">px</string>
+
+    <!-- Step 3: Playback & Animation Loop -->
+    <string name="step_3_title">Playback &amp; Loops</string>
+    <string name="step_3_subtitle">Set frame rate, scaling mode, and loop behavior</string>
+    <string name="target_fps_label">Target FPS</string>
+    <string name="fps_range_hint">1&#8211;120</string>
+    <string name="fps_preset_24">24 FPS</string>
+    <string name="fps_preset_30">30 FPS</string>
+    <string name="fps_preset_60">60 FPS</string>
+    <string name="part_type_label">Part Type</string>
+    <string name="part_type_p">p (Interruptible)</string>
+    <string name="part_type_p_title">p - Interruptible</string>
+    <string name="part_type_p_desc">Stops playing as soon as Android finishes booting.</string>
+    <string name="part_type_c">c (Complete)</string>
+    <string name="part_type_c_title">c - Complete Cycle</string>
+    <string name="part_type_c_desc">Always plays the entire loop before stopping.</string>
+    <string name="loop_count_label">Loop Count (0 = infinite)</string>
+    <string name="pause_count_label">Pause Frames</string>
+    <string name="scaling_mode_title">Scaling Mode</string>
+    <string name="scaling_fit_center">Fit Center</string>
+    <string name="scaling_center_crop">Center Crop</string>
+    <string name="scaling_stretch">Stretch</string>
+
+    <!-- Multi-Part Mode -->
+    <string name="multi_part_switch_title">Multi-Part Animation (Intro + Loop)</string>
+    <string name="multi_part_desc" tools:ignore="Typos">Splits into part0 (Intro, 1 time) and part1 (Continuous Loop).</string>
+    <string name="split_point_label">Split Point: %1$.1fs (Part 0: %2$.1fs – %3$.1fs | Part 1: %4$.1fs – %5$.1fs)</string>
+    <string name="part0_badge">Part 0 (Intro)</string>
+    <string name="part1_badge">Part 1 (Loop)</string>
+    <string name="part0_loop_label">Part 0 Loop (1=once)</string>
+    <string name="part1_loop_label">Part 1 Loop (0=infinite)</string>
+
+    <!-- Step 4: Formatting & Quality -->
+    <string name="step_4_title">Format &amp; Background</string>
+    <string name="step_4_subtitle">Select image encoding and letterbox color</string>
+    <string name="image_format_title">Image Format</string>
+    <string name="format_png">PNG (Lossless)</string>
+    <string name="format_jpeg">JPEG (Compressed)</string>
+    <string name="jpeg_quality_label">JPEG Quality (%1$d%%)</string>
+    <string name="background_color_title">Background Color</string>
+    <string name="custom_hex_label">Custom Hex Code</string>
+    <string name="hex_error_hint">Must be in format #RRGGBB</string>
+
+    <!-- Step 5: Export Type & Actions -->
+    <string name="step_5_title">Export Options</string>
+    <string name="step_5_subtitle">Root module packaging and metadata</string>
+    <string name="magisk_export_switch">Magisk / KernelSU Root Module</string>
+    <string name="magisk_export_desc">Create a flashable ZIP module directly installable via root managers</string>
+    <string name="magisk_module_name_label">Module Name</string>
+    <string name="magisk_module_author_label">Author</string>
+    <string name="create_bootanimation_button">Generate bootanimation.zip</string>
+    <string name="create_magisk_button">Generate Magisk Module</string>
+    <string name="cancel_generation_button">Cancel</string>
+    <string name="preview_button">Preview</string>
+    <string name="error_check_form">Please fix errors in the form before generating</string>
+    <string name="generation_starting">Initializing generation&#8230;</string>
+    <string name="share_chooser_title">Share Boot Animation</string>
+    <string name="error_could_not_share">Could not share file</string>
+
+    <!-- Preview Dialog -->
+    <string name="preview_dialog_title">Boot Animation Preview</string>
+    <string name="preview_loading">Generating preview frames&#8230;</string>
+    <string name="preview_fps_label">Speed: %1$d FPS</string>
+    <string name="preview_frame_indicator">Frame %1$d / %2$d</string>
+    <string name="play_preview">Play</string>
+    <string name="pause_preview">Pause</string>
+    <string name="no_preview_frames">No frames available for preview.</string>
+    <string name="close_button">Close</string>
+
+    <!-- ZIP Inspector Dialog -->
+    <string name="inspector_dialog_title">Boot Animation Inspector</string>
+    <string name="inspector_subtitle">Archive details and configuration</string>
+    <string name="inspector_file_size">Archive Size: %1$.1f MB</string>
+    <string name="inspector_total_frames">%1$d frames (%2$d parts)</string>
+    <string name="inspector_preview_label">First frame preview</string>
+    <string name="inspector_module_badge">Root Module (Magisk)</string>
+    <string name="inspector_module_info">Module: %1$s • Author: %2$s</string>
+    <string name="inspector_desc_resolution">Resolution: %1$d × %2$d @ %3$d FPS</string>
+    <string name="inspector_parts_title">Animation Parts:</string>
+    <string name="inspector_part_item" tools:ignore="PluralsCandidate">Part %1$s (%2$c): %3$d frames | loop=%4$d, pause=%5$d%6$s</string>
+    <string name="inspector_apply_button">Apply to Settings</string>
+    <string name="scroll_left_button">Scroll left</string>
+    <string name="scroll_right_button">Scroll right</string>
+
+    <!-- Warnings -->
+    <string name="warning_bootloop_title">Bootloop Risk Warning</string>
+    <string name="warning_bootloop_message">Installing root modules or custom boot animations can cause a bootloop, especially if parameters (resolution, format, or frame rate) are configured incorrectly or incompatibly with your device. Ensure you have recovery access or safe mode enabled.</string>
+    <string name="warning_oom_dialog_title">OOM Risk Warning (>90MB)</string>
+    <string name="warning_oom_dialog_message">The generated bootanimation.zip is %1$.1f MB. Archives larger than 90 MB may cause Out Of Memory (OOM) crashes and bootloops during Android boot. We recommend using JPEG format or lowering the resolution if your device experiences boot issues.</string>
+    <string name="warning_oom_estimated_hint">High file size (>90MB estimated). May cause Out Of Memory (OOM) errors during boot. Consider using JPEG format.</string>
+    <string name="inspector_oom_warning">Warning: Archive exceeds 90 MB (%1$.1f MB). High risk of OOM during boot!</string>
+    <string name="dismiss_warning_button">I Understand</string>
+
+    <!-- About Dialog -->
+    <string name="action_about">About</string>
+    <string name="about_dialog_title">About Kitsune Boot</string>
+    <string name="about_app_description">Boot Animation Maker for Android</string>
+    <string name="about_copyright">Copyright &#169; 2026 Yervant</string>
+    <string name="about_license_title">GNU General Public License v3.0</string>
+    <string name="about_license_body">This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.\n\nThis program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.</string>
+</resources>

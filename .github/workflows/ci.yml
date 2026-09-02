@@ -1,0 +1,83 @@
+name: CI - Build & Test
+
+on:
+  push:
+    branches: [ main, master ]
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+      - 'LICENSE'
+  pull_request:
+    branches: [ main, master ]
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+      - 'LICENSE'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  android-build:
+    name: Android Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Java 21 LTS
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Accept Android SDK Licenses & Set Environment
+        run: |
+          yes | sdkmanager --licenses || true
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master' }}
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Setup Keystore for Release Signing
+        if: env.KEYSTORE_BASE64 != ''
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "ORG_GRADLE_PROJECT_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> $GITHUB_ENV
+          echo "ORG_GRADLE_PROJECT_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> $GITHUB_ENV
+          echo "ORG_GRADLE_PROJECT_KEY_ALIAS=$KEY_ALIAS" >> $GITHUB_ENV
+          echo "ORG_GRADLE_PROJECT_KEY_PASSWORD=$KEY_PASSWORD" >> $GITHUB_ENV
+
+      - name: Run Unit Tests & Assemble APKs
+        run: ./gradlew testDebugUnitTest assembleDebug assembleRelease --stacktrace
+
+      - name: Upload Debug APKs
+        uses: actions/upload-artifact@v7
+        with:
+          name: KitsuneBoot-debug-${{ github.sha }}
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 14
+
+      - name: Upload Release APKs
+        uses: actions/upload-artifact@v7
+        with:
+          name: KitsuneBoot-release-${{ github.sha }}
+          path: app/build/outputs/apk/release/*.apk
+          retention-days: 14
