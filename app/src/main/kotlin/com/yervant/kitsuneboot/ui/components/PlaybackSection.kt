@@ -29,6 +29,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -40,6 +42,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yervant.kitsuneboot.BootAnimationUiState
+import com.yervant.kitsuneboot.MultiPartSourceMode
 import com.yervant.kitsuneboot.R
 import com.yervant.kitsuneboot.ScalingMode
 
@@ -51,9 +54,12 @@ fun PlaybackSection(
     onPartTypeChanged: (Char) -> Unit,
     onScalingModeChanged: (ScalingMode) -> Unit,
     onMultiPartModeChanged: (Boolean) -> Unit,
+    onMultiPartSourceModeChanged: (MultiPartSourceMode) -> Unit,
     onSplitPointChanged: (Long) -> Unit,
     onPart0LoopChanged: (String) -> Unit,
     onPart1LoopChanged: (String) -> Unit,
+    onPart0PauseSecondsChanged: (Float) -> Unit,
+    onPingPongEnabledChanged: (Boolean) -> Unit,
     onLoopCountChanged: (String) -> Unit,
     onPauseCountChanged: (String) -> Unit,
     modifier: Modifier = Modifier
@@ -288,86 +294,337 @@ fun PlaybackSection(
                 Switch(
                     checked = uiState.multiPartMode,
                     onCheckedChange = onMultiPartModeChanged,
-                    enabled = !uiState.isGenerating && uiState.videoDurationMs > 0
+                    enabled = !uiState.isGenerating && (uiState.videoDurationMs > 0 || uiState.loopVideoUri != null)
                 )
             }
         }
 
         // Multi-Part Controls vs Single-Part Controls
         AnimatedVisibility(
-            visible = uiState.multiPartMode && uiState.videoDurationMs > 0,
+            visible = uiState.multiPartMode && (uiState.videoDurationMs > 0 || uiState.loopVideoUri != null),
             enter = expandVertically() + fadeIn(),
             exit = shrinkVertically() + fadeOut()
         ) {
             Column(modifier = Modifier.padding(top = 12.dp)) {
-                val startSec = uiState.videoStartMs / 1000.0
-                val splitSec = uiState.splitPointMs / 1000.0
-                val endSec = uiState.videoEndMs / 1000.0
-                val part0Duration = maxOf(0.0, splitSec - startSec)
-                val part1Duration = maxOf(0.0, endSec - splitSec)
+                // Source Selection Segmented Buttons
+                Text(
+                    text = stringResource(R.string.multi_part_source_label),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
 
-                // Visual Timeline Badges
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Surface(
-                        modifier = Modifier.weight(1f),
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = stringResource(R.string.part0_badge),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                            Text(
-                                text = "${String.format(java.util.Locale.US, "%.1f", part0Duration)}s (${String.format(java.util.Locale.US, "%.1f", startSec)}s–${String.format(java.util.Locale.US, "%.1f", splitSec)}s)",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-                    }
+                Spacer(modifier = Modifier.height(8.dp))
 
-                    Surface(
-                        modifier = Modifier.weight(1f),
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    val sources = listOf(
+                        MultiPartSourceMode.DUAL_VIDEO to R.string.dual_video_mode,
+                        MultiPartSourceMode.SINGLE_SPLIT to R.string.single_video_split_mode
+                    )
+                    sources.forEachIndexed { index, (mode, labelRes) ->
+                        val isModeSelected = uiState.multiPartSourceMode == mode
+                        SegmentedButton(
+                            selected = isModeSelected,
+                            onClick = { onMultiPartSourceModeChanged(mode) },
+                            shape = SegmentedButtonDefaults.itemShape(index = index, count = sources.size),
+                            enabled = !uiState.isGenerating
+                        ) {
                             Text(
-                                text = stringResource(R.string.part1_badge),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
-                            Text(
-                                text = "${String.format(java.util.Locale.US, "%.1f", part1Duration)}s (${String.format(java.util.Locale.US, "%.1f", splitSec)}s–${String.format(java.util.Locale.US, "%.1f", endSec)}s)",
-                                style = MaterialTheme.typography.bodySmall,
+                                stringResource(labelRes),
                                 fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                                maxLines = 1,
+                                fontWeight = if (isModeSelected) FontWeight.Bold else FontWeight.Normal
                             )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-                val sliderMin = uiState.videoStartMs.toFloat()
-                val sliderMax = maxOf(sliderMin + 1f, uiState.videoEndMs.toFloat())
-                val splitValue = uiState.splitPointMs.toFloat().coerceIn(sliderMin, sliderMax)
+                if (uiState.multiPartSourceMode == MultiPartSourceMode.SINGLE_SPLIT) {
+                    val startSec = uiState.videoStartMs / 1000.0
+                    val splitSec = uiState.splitPointMs / 1000.0
+                    val endSec = uiState.videoEndMs / 1000.0
+                    val part0Duration = maxOf(0.0, splitSec - startSec)
+                    val part1Duration = maxOf(0.0, endSec - splitSec)
 
-                Slider(
-                    value = splitValue,
-                    onValueChange = { onSplitPointChanged(it.toLong()) },
-                    valueRange = sliderMin..sliderMax,
-                    enabled = !uiState.isGenerating
-                )
+                    // Visual Timeline Badges
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = stringResource(R.string.part0_badge),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Text(
+                                    text = "${String.format(java.util.Locale.US, "%.1f", part0Duration)}s (${String.format(java.util.Locale.US, "%.1f", startSec)}s–${String.format(java.util.Locale.US, "%.1f", splitSec)}s)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
 
-                Spacer(modifier = Modifier.height(6.dp))
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = stringResource(R.string.part1_badge),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                                Text(
+                                    text = "${String.format(java.util.Locale.US, "%.1f", part1Duration)}s (${String.format(java.util.Locale.US, "%.1f", splitSec)}s–${String.format(java.util.Locale.US, "%.1f", endSec)}s)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    val sliderMin = uiState.videoStartMs.toFloat()
+                    val sliderMax = maxOf(sliderMin + 1f, uiState.videoEndMs.toFloat())
+                    val splitValue = uiState.splitPointMs.toFloat().coerceIn(sliderMin, sliderMax)
+
+                    Slider(
+                        value = splitValue,
+                        onValueChange = { onSplitPointChanged(it.toLong()) },
+                        valueRange = sliderMin..sliderMax,
+                        enabled = !uiState.isGenerating
+                    )
+                } else {
+                    // DUAL_VIDEO Diagnostics Badges
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = stringResource(R.string.part0_badge),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Text(
+                                    text = stringResource(
+                                        R.string.part0_diagnostics_badge,
+                                        uiState.part0EstimatedFrames,
+                                        uiState.part0EstimatedDurationSec
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
+
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = stringResource(R.string.part1_badge),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                                Text(
+                                    text = stringResource(
+                                        R.string.part1_diagnostics_badge,
+                                        uiState.part1EstimatedFrames,
+                                        uiState.part1EstimatedDurationSec
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Pause after Intro (holds the last frame of part0)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(R.string.pause_seconds_label),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = stringResource(R.string.pause_seconds_hint),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            val frames = uiState.part0PauseCount.toIntOrNull() ?: 0
+                            Surface(
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.pause_seconds_value, uiState.part0PauseSeconds, frames),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Slider(
+                            value = uiState.part0PauseSeconds,
+                            onValueChange = onPart0PauseSecondsChanged,
+                            valueRange = 0f..3f,
+                            steps = 5,
+                            enabled = !uiState.isGenerating
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf(0f, 0.5f, 1.0f, 1.5f, 2.0f).forEach { sec ->
+                                val isSelected = kotlin.math.abs(uiState.part0PauseSeconds - sec) < 0.05f
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { onPart0PauseSecondsChanged(sec) },
+                                    label = {
+                                        Text(
+                                            "${sec}s",
+                                            fontSize = 11.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    },
+                                    enabled = !uiState.isGenerating,
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Ping-Pong Loop Toggle for part1
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.ping_pong_loop_title),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = stringResource(R.string.ping_pong_loop_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Switch(
+                            checked = uiState.isPingPongEnabled,
+                            onCheckedChange = onPingPongEnabledChanged,
+                            enabled = !uiState.isGenerating
+                        )
+                    }
+                }
+
+                // Diagnostics warning if part1 is risky
+                AnimatedVisibility(
+                    visible = uiState.isLoopLengthRisky,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp),
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.85f),
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = stringResource(R.string.loop_warning_too_long),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontSize = 11.sp,
+                                lineHeight = 15.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
 
                 Row(modifier = Modifier.fillMaxWidth()) {
                     OutlinedTextField(

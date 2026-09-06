@@ -184,7 +184,15 @@ class BootAnimationViewModel : ViewModel() {
 
     fun onFrameWidthChanged(value: String) = _uiState.update { it.copy(frameWidth = value) }
     fun onFrameHeightChanged(value: String) = _uiState.update { it.copy(frameHeight = value) }
-    fun onFpsChanged(value: String) = _uiState.update { it.copy(fps = value) }
+    fun onFpsChanged(value: String) = _uiState.update { state ->
+        val fpsInt = value.toIntOrNull()?.coerceIn(1, 120)
+        val newPauseCount = if (fpsInt != null && state.part0PauseSeconds > 0f) {
+            (state.part0PauseSeconds * fpsInt).toInt().toString()
+        } else {
+            state.part0PauseCount
+        }
+        state.copy(fps = value, part0PauseCount = newPauseCount)
+    }
     fun onLoopCountChanged(value: String) = _uiState.update { it.copy(loopCount = value) }
     fun onPauseCountChanged(value: String) = _uiState.update { it.copy(pauseCount = value) }
     fun onPartTypeChanged(value: Char) = _uiState.update { it.copy(partType = value) }
@@ -195,11 +203,82 @@ class BootAnimationViewModel : ViewModel() {
     fun onCustomHexColorChanged(value: String) = _uiState.update { it.copy(customHexColor = value) }
 
     fun onMultiPartModeChanged(enabled: Boolean) = _uiState.update { it.copy(multiPartMode = enabled) }
+    fun onMultiPartSourceModeChanged(mode: MultiPartSourceMode) = _uiState.update { it.copy(multiPartSourceMode = mode) }
     fun onSplitPointChanged(value: Long) = _uiState.update { it.copy(splitPointMs = value) }
     fun onPart0LoopChanged(value: String) = _uiState.update { it.copy(part0LoopCount = value) }
-    fun onPart0PauseChanged(value: String) = _uiState.update { it.copy(part0PauseCount = value) }
+    fun onPart0PauseChanged(value: String) = _uiState.update { state ->
+        val frames = value.toIntOrNull() ?: 0
+        val fpsInt = state.fps.toIntOrNull()?.coerceIn(1, 120) ?: 30
+        val sec = frames.toFloat() / fpsInt.toFloat()
+        state.copy(part0PauseCount = value, part0PauseSeconds = sec)
+    }
+    fun onPart0PauseSecondsChanged(seconds: Float) = _uiState.update { state ->
+        val safeSec = seconds.coerceAtLeast(0f)
+        val targetFps = state.fps.toIntOrNull()?.coerceIn(1, 120) ?: 30
+        val pauseFrames = (safeSec * targetFps).toInt()
+        state.copy(part0PauseSeconds = safeSec, part0PauseCount = pauseFrames.toString())
+    }
     fun onPart1LoopChanged(value: String) = _uiState.update { it.copy(part1LoopCount = value) }
     fun onPart1PauseChanged(value: String) = _uiState.update { it.copy(part1PauseCount = value) }
+    fun onPingPongEnabledChanged(enabled: Boolean) = _uiState.update { it.copy(isPingPongEnabled = enabled) }
+    fun onCrossfadeEnabledChanged(enabled: Boolean) = _uiState.update { it.copy(isCrossfadeEnabled = enabled) }
+    fun onCrossfadeFramesChanged(frames: Int) = _uiState.update { it.copy(crossfadeFrames = frames.coerceIn(2, 30)) }
+
+    fun onLoopVideoSelected(context: Context, uri: Uri) {
+        val appContext = context.applicationContext
+        val fileName = getFileName(appContext, uri)
+        _uiState.update {
+            it.copy(
+                loopVideoUri = uri,
+                loopVideoName = fileName,
+                errorMessage = null,
+                successMessage = null
+            )
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val retriever = MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(appContext, uri)
+                val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                val captureRate = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE)?.toFloatOrNull()
+                val frameCount = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_FRAME_COUNT)?.toFloatOrNull()
+                val durationMs = durationStr?.toLongOrNull() ?: 0L
+
+                val detectedFps = when {
+                    captureRate != null && captureRate > 0f -> captureRate
+                    frameCount != null && durationMs > 0L -> (frameCount / (durationMs / 1000f))
+                    else -> null
+                }
+
+                _uiState.update { state ->
+                    state.copy(
+                        loopVideoDurationMs = durationMs,
+                        loopVideoStartMs = 0L,
+                        loopVideoEndMs = durationMs,
+                        loopDetectedFps = detectedFps
+                    )
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+            } finally {
+                try {
+                    retriever.release()
+                } catch (ignored: Exception) {}
+            }
+        }
+    }
+
+    fun onLoopTrimRangeChanged(startMs: Long, endMs: Long) = _uiState.update {
+        val safeStart = startMs.coerceAtLeast(0L)
+        val safeEnd = endMs.coerceAtLeast(safeStart)
+        it.copy(
+            loopVideoStartMs = safeStart,
+            loopVideoEndMs = safeEnd
+        )
+    }
+
+    fun onLoopRotationChanged(degrees: Int) = _uiState.update { it.copy(loopRotationDegrees = degrees) }
 
     fun onExportAsMagiskModuleChanged(enabled: Boolean) = _uiState.update { it.copy(exportAsMagiskModule = enabled) }
     fun onMagiskModuleNameChanged(value: String) = _uiState.update { it.copy(magiskModuleName = value) }
@@ -241,23 +320,64 @@ class BootAnimationViewModel : ViewModel() {
         previewJob?.cancel()
         previewJob = viewModelScope.launch(Dispatchers.IO) {
             try {
-                val frames = BootAnimationGenerator.extractPreviewFrames(
-                    context = appContext,
-                    videoUri = uri,
-                    targetWidth = 360,
-                    targetHeight = 640,
-                    scalingMode = currentState.scalingMode,
-                    backgroundColor = currentState.effectiveColor.toArgb(),
-                    startMs = currentState.videoStartMs,
-                    endMs = currentState.videoEndMs,
-                    rotationDegrees = currentState.rotationDegrees,
-                    sampleCount = 16
-                )
-                _uiState.update {
-                    it.copy(
-                        isPreviewLoading = false,
-                        previewBitmaps = frames
+                if (currentState.multiPartMode) {
+                    val isDual = currentState.multiPartSourceMode == MultiPartSourceMode.DUAL_VIDEO
+                    val p0Uri = uri
+                    val p0Start = currentState.videoStartMs
+                    val p0End = if (isDual) currentState.videoEndMs else currentState.splitPointMs
+                    val p0Rot = currentState.rotationDegrees
+
+                    val p1Uri = if (isDual) (currentState.loopVideoUri ?: uri) else uri
+                    val p1Start = if (isDual) currentState.loopVideoStartMs else currentState.splitPointMs
+                    val p1End = if (isDual) currentState.loopVideoEndMs else currentState.videoEndMs
+                    val p1Rot = if (isDual) currentState.loopRotationDegrees else currentState.rotationDegrees
+
+                    val (p0Frames, p1Frames) = BootAnimationGenerator.extractMultiPartPreviewFrames(
+                        context = appContext,
+                        part0Uri = p0Uri,
+                        part0StartMs = p0Start,
+                        part0EndMs = p0End,
+                        part0Rotation = p0Rot,
+                        part1Uri = p1Uri,
+                        part1StartMs = p1Start,
+                        part1EndMs = p1End,
+                        part1Rotation = p1Rot,
+                        isPingPongEnabled = currentState.isPingPongEnabled,
+                        targetWidth = 360,
+                        targetHeight = 640,
+                        scalingMode = currentState.scalingMode,
+                        backgroundColor = currentState.effectiveColor.toArgb(),
+                        sampleCountPerPart = 12
                     )
+                    _uiState.update {
+                        it.copy(
+                            isPreviewLoading = false,
+                            previewBitmaps = p0Frames + p1Frames,
+                            part0PreviewBitmaps = p0Frames,
+                            part1PreviewBitmaps = p1Frames
+                        )
+                    }
+                } else {
+                    val frames = BootAnimationGenerator.extractPreviewFrames(
+                        context = appContext,
+                        videoUri = uri,
+                        targetWidth = 360,
+                        targetHeight = 640,
+                        scalingMode = currentState.scalingMode,
+                        backgroundColor = currentState.effectiveColor.toArgb(),
+                        startMs = currentState.videoStartMs,
+                        endMs = currentState.videoEndMs,
+                        rotationDegrees = currentState.rotationDegrees,
+                        sampleCount = 16
+                    )
+                    _uiState.update {
+                        it.copy(
+                            isPreviewLoading = false,
+                            previewBitmaps = frames,
+                            part0PreviewBitmaps = emptyList(),
+                            part1PreviewBitmaps = emptyList()
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
@@ -265,6 +385,8 @@ class BootAnimationViewModel : ViewModel() {
                     it.copy(
                         isPreviewLoading = false,
                         previewBitmaps = emptyList(),
+                        part0PreviewBitmaps = emptyList(),
+                        part1PreviewBitmaps = emptyList(),
                         errorMessage = "Failed to load preview frames: ${e.message}"
                     )
                 }
@@ -279,7 +401,9 @@ class BootAnimationViewModel : ViewModel() {
             it.copy(
                 isPreviewDialogOpen = false,
                 isPreviewLoading = false,
-                previewBitmaps = emptyList()
+                previewBitmaps = emptyList(),
+                part0PreviewBitmaps = emptyList(),
+                part1PreviewBitmaps = emptyList()
             )
         }
     }
@@ -435,6 +559,14 @@ class BootAnimationViewModel : ViewModel() {
             endMs = currentState.videoEndMs,
             rotationDegrees = currentState.rotationDegrees,
             multiPartMode = currentState.multiPartMode,
+            multiPartSourceMode = currentState.multiPartSourceMode,
+            loopVideoUri = currentState.loopVideoUri,
+            loopStartMs = currentState.loopVideoStartMs,
+            loopEndMs = currentState.loopVideoEndMs,
+            loopRotationDegrees = currentState.loopRotationDegrees,
+            isPingPongEnabled = currentState.isPingPongEnabled,
+            isCrossfadeEnabled = currentState.isCrossfadeEnabled,
+            crossfadeFrames = currentState.crossfadeFrames,
             splitPointMs = currentState.splitPointMs,
             part0LoopCount = currentState.part0LoopCount.toIntOrNull() ?: 1,
             part0PauseCount = currentState.part0PauseCount.toIntOrNull() ?: 0,

@@ -73,6 +73,8 @@ internal object HardwareVideoDecoder {
         part0TotalFrames: Int,
         bitmapPool: BitmapPool,
         rawChannel: SendChannel<BootAnimationGenerator.RawFrameTask>,
+        frameIndexOffset: Int = 0,
+        overrideIsPart0: Boolean? = null,
         isCancelled: () -> Boolean
     ): Boolean {
         val singleThreadExecutor = Executors.newSingleThreadExecutor()
@@ -96,6 +98,8 @@ internal object HardwareVideoDecoder {
                     part0TotalFrames = part0TotalFrames,
                     bitmapPool = bitmapPool,
                     rawChannel = rawChannel,
+                    frameIndexOffset = frameIndexOffset,
+                    overrideIsPart0 = overrideIsPart0,
                     isCancelled = isCancelled
                 )
             }
@@ -122,6 +126,8 @@ internal object HardwareVideoDecoder {
         part0TotalFrames: Int,
         bitmapPool: BitmapPool,
         rawChannel: SendChannel<BootAnimationGenerator.RawFrameTask>,
+        frameIndexOffset: Int = 0,
+        overrideIsPart0: Boolean? = null,
         isCancelled: () -> Boolean
     ): Boolean {
         var extractor: MediaExtractor? = null
@@ -248,11 +254,16 @@ internal object HardwareVideoDecoder {
                             val pooledBitmap = bitmapPool.acquire()
                             renderer.drawAndRead(surfaceTexture, pixelBuffer, pooledBitmap)
 
-                            val isPart0 = !multiPartMode || capturedFrames < part0TotalFrames
-                            val partFrameIndex = if (isPart0) capturedFrames else capturedFrames - part0TotalFrames
+                            val isPart0 = overrideIsPart0 ?: (!multiPartMode || capturedFrames < part0TotalFrames)
+                            val partFrameIndex = if (overrideIsPart0 != null) {
+                                capturedFrames
+                            } else {
+                                if (isPart0) capturedFrames else capturedFrames - part0TotalFrames
+                            }
+                            val globalFrameIndex = frameIndexOffset + capturedFrames
 
                             rawChannel.send(
-                                BootAnimationGenerator.RawFrameTask(capturedFrames, isPart0, partFrameIndex, pooledBitmap)
+                                BootAnimationGenerator.RawFrameTask(globalFrameIndex, isPart0, partFrameIndex, pooledBitmap)
                             )
                             capturedFrames++
                             currentTargetPtsUs += frameIntervalUs

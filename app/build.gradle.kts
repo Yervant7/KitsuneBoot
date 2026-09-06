@@ -49,8 +49,8 @@ android {
         applicationId = "com.yervant.kitsuneboot"
         minSdk = 29
         targetSdk = 37
-        versionCode = 1
-        versionName = "v1.0.0"
+        versionCode = 110
+        versionName = "v1.1.0"
 
         signingConfig = signingConfigs.getByName("debug")
         multiDexEnabled = false
@@ -109,4 +109,5 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.compose.material.icons.core)
     debugImplementation(libs.androidx.compose.ui.tooling)
+    testImplementation("junit:junit:4.13.2")
 }

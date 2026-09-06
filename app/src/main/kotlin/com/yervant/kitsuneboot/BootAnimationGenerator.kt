@@ -214,6 +214,14 @@ object BootAnimationGenerator {
         endMs: Long = 0L,
         rotationDegrees: Int = 0,
         multiPartMode: Boolean = false,
+        multiPartSourceMode: MultiPartSourceMode = MultiPartSourceMode.SINGLE_SPLIT,
+        loopVideoUri: Uri? = null,
+        loopStartMs: Long = 0L,
+        loopEndMs: Long = 0L,
+        loopRotationDegrees: Int = 0,
+        isPingPongEnabled: Boolean = false,
+        isCrossfadeEnabled: Boolean = false,
+        crossfadeFrames: Int = 8,
         splitPointMs: Long = 0L,
         part0LoopCount: Int = 1,
         part0PauseCount: Int = 0,
@@ -271,24 +279,85 @@ object BootAnimationGenerator {
             throw IllegalArgumentException("Trimmed video exceeds 60s limit (${activeDurationMs / 1000}s).")
         }
 
-        val durationSec = activeDurationMs / 1000.0
-        val totalTargetFrames = (durationSec * targetFps).toInt().coerceAtLeast(1)
-        val effectiveSplitMs = if (multiPartMode) {
-            splitPointMs.coerceIn(effectiveStartMs, effectiveEndMs)
-        } else effectiveEndMs
+        val isDualVideo = multiPartMode && multiPartSourceMode == MultiPartSourceMode.DUAL_VIDEO
+        var loopEffectiveStartMs = 0L
+        var loopEffectiveEndMs = 0L
 
-        val rawPart0Frames = if (multiPartMode) {
-            (0 until totalTargetFrames).count { i ->
-                val ts = effectiveStartMs + (i * 1000L) / targetFps
-                ts < effectiveSplitMs
+        val part0TotalFrames: Int
+        val basePart1Frames: Int
+        val part1TotalFrames: Int
+        val totalDecodedFrames: Int
+        val totalTargetFrames: Int
+        var effectiveSplitMs = effectiveEndMs
+
+        if (isDualVideo) {
+            require(loopVideoUri != null) { "Loop video URI cannot be null in dual video mode." }
+            val loopFileSize = context.contentResolver.openFileDescriptor(loopVideoUri, "r")?.use {
+                it.statSize
+            } ?: 0L
+            if (loopFileSize > MAX_FILE_SIZE_BYTES) {
+                throw IllegalArgumentException("Loop video exceeds 100MB limit (${loopFileSize / (1024 * 1024)}MB).")
             }
+
+            val loopRetriever = MediaMetadataRetriever()
+            var loopMetaInit = false
+            val loopTotalDurationMs: Long
+            try {
+                loopRetriever.setDataSource(context, loopVideoUri)
+                loopMetaInit = true
+                val loopDurStr = loopRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                loopTotalDurationMs = loopDurStr?.toLongOrNull() ?: 0L
+                if (loopTotalDurationMs <= 0L) {
+                    throw IllegalArgumentException("Could not read loop video duration.")
+                }
+            } catch (e: Exception) {
+                if (loopMetaInit) {
+                    try { loopRetriever.release() } catch (ignored: Exception) {}
+                }
+                throw IllegalArgumentException("Could not load loop video. Invalid or corrupted format.")
+            } finally {
+                if (loopMetaInit) {
+                    try { loopRetriever.release() } catch (ignored: Exception) {}
+                }
+            }
+
+            loopEffectiveStartMs = loopStartMs.coerceIn(0L, loopTotalDurationMs)
+            val loopMinEnd = (loopEffectiveStartMs + 100L).coerceAtMost(loopTotalDurationMs)
+            loopEffectiveEndMs = if (loopEndMs > 0L) loopEndMs.coerceIn(loopMinEnd, loopTotalDurationMs) else loopTotalDurationMs
+            val loopActiveDurationMs = (loopEffectiveEndMs - loopEffectiveStartMs).coerceAtLeast(100L)
+            if (loopActiveDurationMs > MAX_DURATION_MS) {
+                throw IllegalArgumentException("Trimmed loop video exceeds 60s limit (${loopActiveDurationMs / 1000}s).")
+            }
+
+            part0TotalFrames = ((activeDurationMs / 1000.0) * targetFps).toInt().coerceAtLeast(1)
+            basePart1Frames = ((loopActiveDurationMs / 1000.0) * targetFps).toInt().coerceAtLeast(1)
+            part1TotalFrames = if (isPingPongEnabled && basePart1Frames >= 2) (2 * basePart1Frames - 2) else basePart1Frames
+            totalDecodedFrames = part0TotalFrames + basePart1Frames
+            totalTargetFrames = part0TotalFrames + part1TotalFrames
         } else {
-            totalTargetFrames
-        }
-        val part0TotalFrames = if (multiPartMode && totalTargetFrames >= 2) {
-            rawPart0Frames.coerceIn(1, totalTargetFrames - 1)
-        } else {
-            rawPart0Frames
+            val durationSec = activeDurationMs / 1000.0
+            val totalFramesInVideo = (durationSec * targetFps).toInt().coerceAtLeast(1)
+            effectiveSplitMs = if (multiPartMode) {
+                splitPointMs.coerceIn(effectiveStartMs, effectiveEndMs)
+            } else effectiveEndMs
+
+            val rawPart0Frames = if (multiPartMode) {
+                (0 until totalFramesInVideo).count { i ->
+                    val ts = effectiveStartMs + (i * 1000L) / targetFps
+                    ts < effectiveSplitMs
+                }
+            } else {
+                totalFramesInVideo
+            }
+            part0TotalFrames = if (multiPartMode && totalFramesInVideo >= 2) {
+                rawPart0Frames.coerceIn(1, totalFramesInVideo - 1)
+            } else {
+                rawPart0Frames
+            }
+            basePart1Frames = if (multiPartMode) (totalFramesInVideo - part0TotalFrames).coerceAtLeast(1) else 0
+            part1TotalFrames = if (multiPartMode && isPingPongEnabled && basePart1Frames >= 2) (2 * basePart1Frames - 2) else basePart1Frames
+            totalDecodedFrames = if (multiPartMode) part0TotalFrames + basePart1Frames else part0TotalFrames
+            totalTargetFrames = if (multiPartMode) part0TotalFrames + part1TotalFrames else part0TotalFrames
         }
 
         onProgress("Initializing frame extraction...", 0.0f)
@@ -310,19 +379,19 @@ object BootAnimationGenerator {
         // 3. Concurrent streaming pipeline setup
         val availableCores = Runtime.getRuntime().availableProcessors()
         val workerCount = availableCores.coerceIn(2, 16)
-        val decoderCount = if (totalTargetFrames >= 12) availableCores.coerceIn(2, 4) else 1
+        val decoderCount = if (totalDecodedFrames >= 12) availableCores.coerceIn(2, 4) else 1
 
         val rawChannel = Channel<RawFrameTask>(capacity = workerCount * 2)
         val compressedChannel = Channel<CompressedFrame>(capacity = workerCount * 2)
 
-        val bitmapPool = BitmapPool(frameWidth, frameHeight, maxPoolSize = workerCount * 3)
+        val bitmapPool = BitmapPool(frameWidth, frameHeight, maxPoolSize = workerCount * 2)
 
         val initialBufferSize = if (imageFormat == ImageFormat.JPEG) {
             (frameWidth * frameHeight / 2).coerceIn(256 * 1024, 4 * 1024 * 1024)
         } else {
             (frameWidth * frameHeight * 4).coerceIn(1024 * 1024, 16 * 1024 * 1024)
         }
-        val byteArrayPool = ByteArrayPool(initialBufferSize, maxPoolSize = workerCount * 4)
+        val byteArrayPool = ByteArrayPool(initialBufferSize, maxPoolSize = workerCount * 2)
         val countingOut = CountingOutputStream(outputStream)
 
         ZipOutputStream(BufferedOutputStream(countingOut, 512 * 1024)).use { zipOut ->
@@ -333,55 +402,162 @@ object BootAnimationGenerator {
                 coroutineScope {
                     // Producer: Hardware Video Decoder (GPU/MediaCodec) with automatic fallback to Multi-Retriever
                     launch(Dispatchers.IO) {
-                        val hardwareSuccess = try {
-                            HardwareVideoDecoder.decode(
-                                context = context,
-                                videoUri = videoUri,
-                                frameWidth = frameWidth,
-                                frameHeight = frameHeight,
-                                targetFps = targetFps,
-                                scalingMode = scalingMode,
-                                backgroundColor = backgroundColor,
-                                rotationDegrees = rotationDegrees,
-                                startMs = effectiveStartMs,
-                                endMs = effectiveEndMs,
-                                multiPartMode = multiPartMode,
-                                splitPointMs = splitPointMs,
-                                totalTargetFrames = totalTargetFrames,
-                                part0TotalFrames = part0TotalFrames,
-                                bitmapPool = bitmapPool,
-                                rawChannel = rawChannel,
-                                isCancelled = isCancelled
-                            )
-                        } catch (e: kotlinx.coroutines.CancellationException) {
-                            throw e
-                        } catch (e: InterruptedException) {
-                            throw e
-                        } catch (e: Exception) {
-                            false
-                        }
+                        if (isDualVideo) {
+                            // Decode Video 1 (Intro -> part0)
+                            onProgress("Extracting Intro frames...", 0.05f)
+                            val hwPart0Success = try {
+                                HardwareVideoDecoder.decode(
+                                    context = context,
+                                    videoUri = videoUri,
+                                    frameWidth = frameWidth,
+                                    frameHeight = frameHeight,
+                                    targetFps = targetFps,
+                                    scalingMode = scalingMode,
+                                    backgroundColor = backgroundColor,
+                                    rotationDegrees = rotationDegrees,
+                                    startMs = effectiveStartMs,
+                                    endMs = effectiveEndMs,
+                                    multiPartMode = true,
+                                    splitPointMs = 0L,
+                                    totalTargetFrames = part0TotalFrames,
+                                    part0TotalFrames = part0TotalFrames,
+                                    bitmapPool = bitmapPool,
+                                    rawChannel = rawChannel,
+                                    frameIndexOffset = 0,
+                                    overrideIsPart0 = true,
+                                    isCancelled = isCancelled
+                                )
+                            } catch (e: Exception) {
+                                if (e is kotlinx.coroutines.CancellationException || e is InterruptedException) throw e
+                                false
+                            }
 
-                        if (!hardwareSuccess) {
-                            // Multi-Retriever Parallel Chunked Fallback
-                            decodeWithMultiRetriever(
-                                context = context,
-                                videoUri = videoUri,
-                                frameWidth = frameWidth,
-                                frameHeight = frameHeight,
-                                targetFps = targetFps,
-                                scalingMode = scalingMode,
-                                backgroundColor = backgroundColor,
-                                rotationDegrees = rotationDegrees,
-                                effectiveStartMs = effectiveStartMs,
-                                effectiveSplitMs = effectiveSplitMs,
-                                multiPartMode = multiPartMode,
-                                totalTargetFrames = totalTargetFrames,
-                                part0TotalFrames = part0TotalFrames,
-                                decoderCount = decoderCount,
-                                bitmapPool = bitmapPool,
-                                rawChannel = rawChannel,
-                                isCancelled = isCancelled
-                            )
+                            if (!hwPart0Success) {
+                                decodeWithMultiRetriever(
+                                    context = context,
+                                    videoUri = videoUri,
+                                    frameWidth = frameWidth,
+                                    frameHeight = frameHeight,
+                                    targetFps = targetFps,
+                                    scalingMode = scalingMode,
+                                    backgroundColor = backgroundColor,
+                                    rotationDegrees = rotationDegrees,
+                                    effectiveStartMs = effectiveStartMs,
+                                    effectiveSplitMs = 0L,
+                                    multiPartMode = true,
+                                    totalTargetFrames = part0TotalFrames,
+                                    part0TotalFrames = part0TotalFrames,
+                                    decoderCount = decoderCount,
+                                    bitmapPool = bitmapPool,
+                                    rawChannel = rawChannel,
+                                    frameIndexOffset = 0,
+                                    overrideIsPart0 = true,
+                                    isCancelled = isCancelled
+                                )
+                            }
+
+                            // Decode Video 2 (Loop -> part1)
+                            onProgress("Extracting Loop frames...", 0.35f)
+                            val hwPart1Success = try {
+                                HardwareVideoDecoder.decode(
+                                    context = context,
+                                    videoUri = loopVideoUri!!,
+                                    frameWidth = frameWidth,
+                                    frameHeight = frameHeight,
+                                    targetFps = targetFps,
+                                    scalingMode = scalingMode,
+                                    backgroundColor = backgroundColor,
+                                    rotationDegrees = loopRotationDegrees,
+                                    startMs = loopEffectiveStartMs,
+                                    endMs = loopEffectiveEndMs,
+                                    multiPartMode = true,
+                                    splitPointMs = 0L,
+                                    totalTargetFrames = basePart1Frames,
+                                    part0TotalFrames = 0,
+                                    bitmapPool = bitmapPool,
+                                    rawChannel = rawChannel,
+                                    frameIndexOffset = part0TotalFrames,
+                                    overrideIsPart0 = false,
+                                    isCancelled = isCancelled
+                                )
+                            } catch (e: Exception) {
+                                if (e is kotlinx.coroutines.CancellationException || e is InterruptedException) throw e
+                                false
+                            }
+
+                            if (!hwPart1Success) {
+                                decodeWithMultiRetriever(
+                                    context = context,
+                                    videoUri = loopVideoUri!!,
+                                    frameWidth = frameWidth,
+                                    frameHeight = frameHeight,
+                                    targetFps = targetFps,
+                                    scalingMode = scalingMode,
+                                    backgroundColor = backgroundColor,
+                                    rotationDegrees = loopRotationDegrees,
+                                    effectiveStartMs = loopEffectiveStartMs,
+                                    effectiveSplitMs = 0L,
+                                    multiPartMode = true,
+                                    totalTargetFrames = basePart1Frames,
+                                    part0TotalFrames = 0,
+                                    decoderCount = decoderCount,
+                                    bitmapPool = bitmapPool,
+                                    rawChannel = rawChannel,
+                                    frameIndexOffset = part0TotalFrames,
+                                    overrideIsPart0 = false,
+                                    isCancelled = isCancelled
+                                )
+                            }
+                        } else {
+                            val hardwareSuccess = try {
+                                HardwareVideoDecoder.decode(
+                                    context = context,
+                                    videoUri = videoUri,
+                                    frameWidth = frameWidth,
+                                    frameHeight = frameHeight,
+                                    targetFps = targetFps,
+                                    scalingMode = scalingMode,
+                                    backgroundColor = backgroundColor,
+                                    rotationDegrees = rotationDegrees,
+                                    startMs = effectiveStartMs,
+                                    endMs = effectiveEndMs,
+                                    multiPartMode = multiPartMode,
+                                    splitPointMs = splitPointMs,
+                                    totalTargetFrames = totalDecodedFrames,
+                                    part0TotalFrames = part0TotalFrames,
+                                    bitmapPool = bitmapPool,
+                                    rawChannel = rawChannel,
+                                    isCancelled = isCancelled
+                                )
+                            } catch (e: kotlinx.coroutines.CancellationException) {
+                                throw e
+                            } catch (e: InterruptedException) {
+                                throw e
+                            } catch (e: Exception) {
+                                false
+                            }
+
+                            if (!hardwareSuccess) {
+                                decodeWithMultiRetriever(
+                                    context = context,
+                                    videoUri = videoUri,
+                                    frameWidth = frameWidth,
+                                    frameHeight = frameHeight,
+                                    targetFps = targetFps,
+                                    scalingMode = scalingMode,
+                                    backgroundColor = backgroundColor,
+                                    rotationDegrees = rotationDegrees,
+                                    effectiveStartMs = effectiveStartMs,
+                                    effectiveSplitMs = effectiveSplitMs,
+                                    multiPartMode = multiPartMode,
+                                    totalTargetFrames = totalDecodedFrames,
+                                    part0TotalFrames = part0TotalFrames,
+                                    decoderCount = decoderCount,
+                                    bitmapPool = bitmapPool,
+                                    rawChannel = rawChannel,
+                                    isCancelled = isCancelled
+                                )
+                            }
                         }
                         rawChannel.close()
                     }
@@ -395,18 +571,20 @@ object BootAnimationGenerator {
 
                             try {
                                 for (task in rawChannel) {
-                                    ensureActive()
-                                    if (isCancelled()) throw InterruptedException("Operation cancelled by user.")
+                                    try {
+                                        ensureActive()
+                                        if (isCancelled()) throw InterruptedException("Operation cancelled by user.")
 
-                                    pooledStream.reset()
-                                    if (imageFormat == ImageFormat.PNG) {
-                                        task.rawBitmap.compress(Bitmap.CompressFormat.PNG, 100, pooledStream)
-                                    } else {
-                                        task.rawBitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality, pooledStream)
+                                        pooledStream.reset()
+                                        if (imageFormat == ImageFormat.PNG) {
+                                            task.rawBitmap.compress(Bitmap.CompressFormat.PNG, 100, pooledStream)
+                                        } else {
+                                            task.rawBitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality, pooledStream)
+                                        }
+                                    } finally {
+                                        // Guarantee return to pool even upon cancellation or compression failure
+                                        bitmapPool.release(task.rawBitmap)
                                     }
-
-                                    // Immediately return bitmap to pool
-                                    bitmapPool.release(task.rawBitmap)
 
                                     val (frameBytes, frameLength) = pooledStream.detachBufferAndReset()
                                     crcCalculator.reset()
@@ -437,6 +615,24 @@ object BootAnimationGenerator {
 
                     // Sequencer / Consumer: writes compressed frames strictly in ascending index order and returns buffers to pool
                     val pendingFrames = mutableMapOf<Int, CompressedFrame>()
+                    val bounceDir = java.io.File(context.cacheDir, "bounce_${System.currentTimeMillis()}").apply { mkdirs() }
+                    val fileExtension = if (imageFormat == ImageFormat.PNG) "png" else "jpg"
+                    var maxPart1FrameIndex = -1
+
+                    fun savePingPongFrameIfNeeded(frame: CompressedFrame) {
+                        if (multiPartMode && isPingPongEnabled && frame.relativePath.startsWith("part1/")) {
+                            val partFrameNum = frame.relativePath.substringAfter("part1/").substringBefore(".").toIntOrNull() ?: -1
+                            if (partFrameNum >= 0) {
+                                maxPart1FrameIndex = maxOf(maxPart1FrameIndex, partFrameNum)
+                                // Stream intermediate frames to disk to prevent OOM
+                                if (partFrameNum > 0) {
+                                    val bounceFile = java.io.File(bounceDir, "frame_$partFrameNum")
+                                    java.io.FileOutputStream(bounceFile).use { it.write(frame.bytes, 0, frame.length) }
+                                }
+                            }
+                        }
+                    }
+
                     try {
                         var nextExpectedIndex = 0
                         var writtenCount = 0
@@ -446,6 +642,7 @@ object BootAnimationGenerator {
                             if (isCancelled()) throw InterruptedException("Operation cancelled by user.")
 
                             if (frame.frameIndex == nextExpectedIndex) {
+                                savePingPongFrameIfNeeded(frame)
                                 addStoredEntryToZip(zipOut, frame.relativePath, frame.bytes, frame.length, frame.crc32)
                                 byteArrayPool.release(frame.bytes)
                                 writtenCount++
@@ -456,6 +653,7 @@ object BootAnimationGenerator {
 
                                 while (pendingFrames.containsKey(nextExpectedIndex)) {
                                     val nextFrame = pendingFrames.remove(nextExpectedIndex)!!
+                                    savePingPongFrameIfNeeded(nextFrame)
                                     addStoredEntryToZip(zipOut, nextFrame.relativePath, nextFrame.bytes, nextFrame.length, nextFrame.crc32)
                                     byteArrayPool.release(nextFrame.bytes)
                                     writtenCount++
@@ -468,7 +666,32 @@ object BootAnimationGenerator {
                                 pendingFrames[frame.frameIndex] = frame
                             }
                         }
+
+                        // Write ping-pong reverse frames using actual decoded frame bounds
+                        if (multiPartMode && isPingPongEnabled && maxPart1FrameIndex >= 2) {
+                            val actualPart1Frames = maxPart1FrameIndex + 1
+                            var bouncePartFrameIndex = actualPart1Frames
+                            val crcCalc = CRC32()
+                            for (reverseNum in (actualPart1Frames - 2) downTo 1) {
+                                ensureActive()
+                                if (isCancelled()) throw InterruptedException("Operation cancelled by user.")
+                                val bounceFile = java.io.File(bounceDir, "frame_$reverseNum")
+                                if (bounceFile.exists()) {
+                                    val bBytes = bounceFile.readBytes()
+                                    val bLen = bBytes.size
+                                    crcCalc.reset()
+                                    crcCalc.update(bBytes, 0, bLen)
+                                    val bouncePath = String.format(Locale.US, "part1/%05d.%s", bouncePartFrameIndex, fileExtension)
+                                    addStoredEntryToZip(zipOut, bouncePath, bBytes, bLen, crcCalc.value)
+                                    bouncePartFrameIndex++
+                                    writtenCount++
+                                    val p = 0.05f + (writtenCount.toFloat() / totalTargetFrames) * 0.90f
+                                    onProgress("Packaging Ping-Pong bounce frame $writtenCount of $totalTargetFrames...", p)
+                                }
+                            }
+                        }
                     } finally {
+                        bounceDir.deleteRecursively()
                         // Release any frames remaining in pendingFrames
                         for (frame in pendingFrames.values) {
                             byteArrayPool.release(frame.bytes)
@@ -604,6 +827,62 @@ object BootAnimationGenerator {
         }
     }
 
+    /**
+     * Extracts distinct sample sequences for part0 and part1, with optional ping-pong expansion for part1.
+     */
+    suspend fun extractMultiPartPreviewFrames(
+        context: Context,
+        part0Uri: Uri,
+        part0StartMs: Long,
+        part0EndMs: Long,
+        part0Rotation: Int,
+        part1Uri: Uri,
+        part1StartMs: Long,
+        part1EndMs: Long,
+        part1Rotation: Int,
+        isPingPongEnabled: Boolean,
+        targetWidth: Int = 360,
+        targetHeight: Int = 640,
+        scalingMode: ScalingMode = ScalingMode.FIT_CENTER,
+        backgroundColor: Int = 0xFF000000.toInt(),
+        sampleCountPerPart: Int = 12
+    ): Pair<List<Bitmap>, List<Bitmap>> = withContext(Dispatchers.IO) {
+        val part0Frames = extractPreviewFrames(
+            context = context,
+            videoUri = part0Uri,
+            targetWidth = targetWidth,
+            targetHeight = targetHeight,
+            scalingMode = scalingMode,
+            backgroundColor = backgroundColor,
+            startMs = part0StartMs,
+            endMs = part0EndMs,
+            rotationDegrees = part0Rotation,
+            sampleCount = sampleCountPerPart
+        )
+
+        val basePart1Frames = extractPreviewFrames(
+            context = context,
+            videoUri = part1Uri,
+            targetWidth = targetWidth,
+            targetHeight = targetHeight,
+            scalingMode = scalingMode,
+            backgroundColor = backgroundColor,
+            startMs = part1StartMs,
+            endMs = part1EndMs,
+            rotationDegrees = part1Rotation,
+            sampleCount = sampleCountPerPart
+        )
+
+        val part1Frames = if (isPingPongEnabled && basePart1Frames.size >= 3) {
+            val bounce = basePart1Frames.drop(1).dropLast(1).reversed()
+            basePart1Frames + bounce
+        } else {
+            basePart1Frames
+        }
+
+        Pair(part0Frames, part1Frames)
+    }
+
     fun computeTransformMatrix(
         scalingMode: ScalingMode,
         frameWidth: Int,
@@ -690,6 +969,8 @@ object BootAnimationGenerator {
         decoderCount: Int,
         bitmapPool: BitmapPool,
         rawChannel: Channel<RawFrameTask>,
+        frameIndexOffset: Int = 0,
+        overrideIsPart0: Boolean? = null,
         isCancelled: () -> Boolean
     ) = coroutineScope {
         val sliceSize = (totalTargetFrames + decoderCount - 1) / decoderCount
@@ -740,20 +1021,22 @@ object BootAnimationGenerator {
                                 rawFrame.recycle()
                             }
 
-                            val isPart0 = !multiPartMode || i < part0TotalFrames
-                            val partFrameIndex = if (isPart0) i else i - part0TotalFrames
+                            val isPart0 = overrideIsPart0 ?: (!multiPartMode || i < part0TotalFrames)
+                            val partFrameIndex = if (overrideIsPart0 != null) i else (if (isPart0) i else i - part0TotalFrames)
+                            val globalFrameIndex = frameIndexOffset + i
 
-                            rawChannel.send(RawFrameTask(i, isPart0, partFrameIndex, outputBitmap))
+                            rawChannel.send(RawFrameTask(globalFrameIndex, isPart0, partFrameIndex, outputBitmap))
                         }
                     } else {
                         for (i in sliceStart until sliceEnd) {
                             ensureActive()
-                            val isPart0 = !multiPartMode || i < part0TotalFrames
-                            val partFrameIndex = if (isPart0) i else i - part0TotalFrames
+                            val isPart0 = overrideIsPart0 ?: (!multiPartMode || i < part0TotalFrames)
+                            val partFrameIndex = if (overrideIsPart0 != null) i else (if (isPart0) i else i - part0TotalFrames)
+                            val globalFrameIndex = frameIndexOffset + i
                             val blank = bitmapPool.acquire()
                             val canvas = Canvas(blank)
                             canvas.drawColor(backgroundColor)
-                            rawChannel.send(RawFrameTask(i, isPart0, partFrameIndex, blank))
+                            rawChannel.send(RawFrameTask(globalFrameIndex, isPart0, partFrameIndex, blank))
                         }
                     }
                 } finally {

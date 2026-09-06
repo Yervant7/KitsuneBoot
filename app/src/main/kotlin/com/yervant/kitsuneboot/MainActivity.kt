@@ -240,6 +240,13 @@ fun BootAnimationApp(viewModel: BootAnimationViewModel = viewModel()) {
         uri?.let { viewModel.onVideoSelected(context, it) }
     }
 
+    // Loop video file picker
+    val loopVideoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { viewModel.onLoopVideoSelected(context, it) }
+    }
+
     // ZIP Inspector file picker
     val zipInspectorLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -365,7 +372,10 @@ fun BootAnimationApp(viewModel: BootAnimationViewModel = viewModel()) {
                     uiState = uiState,
                     onChooseVideo = { videoPickerLauncher.launch("video/*") },
                     onTrimRangeChanged = { start, end -> viewModel.onTrimRangeChanged(start, end) },
-                    onRotationChanged = { deg -> viewModel.onRotationChanged(deg) }
+                    onRotationChanged = { deg -> viewModel.onRotationChanged(deg) },
+                    onChooseLoopVideo = { loopVideoPickerLauncher.launch("video/*") },
+                    onLoopTrimRangeChanged = { start, end -> viewModel.onLoopTrimRangeChanged(start, end) },
+                    onLoopRotationChanged = { deg -> viewModel.onLoopRotationChanged(deg) }
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -395,9 +405,12 @@ fun BootAnimationApp(viewModel: BootAnimationViewModel = viewModel()) {
                     onPartTypeChanged = { viewModel.onPartTypeChanged(it) },
                     onScalingModeChanged = { viewModel.onScalingModeChanged(it) },
                     onMultiPartModeChanged = { viewModel.onMultiPartModeChanged(it) },
+                    onMultiPartSourceModeChanged = { viewModel.onMultiPartSourceModeChanged(it) },
                     onSplitPointChanged = { viewModel.onSplitPointChanged(it) },
                     onPart0LoopChanged = { viewModel.onPart0LoopChanged(it) },
                     onPart1LoopChanged = { viewModel.onPart1LoopChanged(it) },
+                    onPart0PauseSecondsChanged = { viewModel.onPart0PauseSecondsChanged(it) },
+                    onPingPongEnabledChanged = { viewModel.onPingPongEnabledChanged(it) },
                     onLoopCountChanged = { viewModel.onLoopCountChanged(it) },
                     onPauseCountChanged = { viewModel.onPauseCountChanged(it) }
                 )
@@ -568,16 +581,61 @@ private fun AnimationPreviewDialog(
     uiState: BootAnimationUiState,
     onDismiss: () -> Unit
 ) {
+    val isMultiPart = uiState.multiPartMode &&
+            uiState.part0PreviewBitmaps.isNotEmpty() &&
+            uiState.part1PreviewBitmaps.isNotEmpty()
+
+    var currentPart by remember { mutableIntStateOf(0) }
     var currentFrameIndex by remember { mutableIntStateOf(0) }
     var isPlaying by remember { mutableStateOf(true) }
-    val frames = uiState.previewBitmaps
 
-    LaunchedEffect(frames, isPlaying) {
-        if (frames.isNotEmpty() && isPlaying) {
-            val fps = uiState.fps.toIntOrNull()?.coerceIn(1, 60) ?: 30
-            val delayMs = (1000L / fps).coerceAtLeast(16L)
-            while (isPlaying) {
-                delay(delayMs)
+    val currentFrames = if (isMultiPart) {
+        if (currentPart == 0) uiState.part0PreviewBitmaps else uiState.part1PreviewBitmaps
+    } else {
+        uiState.previewBitmaps
+    }
+
+    LaunchedEffect(
+        isMultiPart,
+        uiState.part0PreviewBitmaps,
+        uiState.part1PreviewBitmaps,
+        uiState.previewBitmaps,
+        isPlaying,
+        currentPart
+    ) {
+        if (!isPlaying) return@LaunchedEffect
+        val fps = uiState.fps.toIntOrNull()?.coerceIn(1, 60) ?: 30
+        val frameDelayMs = (1000L / fps).coerceAtLeast(16L)
+
+        while (isPlaying) {
+            if (isMultiPart) {
+                if (currentPart == 0) {
+                    val p0Frames = uiState.part0PreviewBitmaps
+                    if (p0Frames.isEmpty()) break
+                    if (currentFrameIndex < p0Frames.size - 1) {
+                        delay(frameDelayMs)
+                        currentFrameIndex++
+                    } else {
+                        // Hold pause on last frame of part0
+                        val pauseMs = (uiState.part0PauseSeconds * 1000L).toLong()
+                        if (pauseMs > 0L) {
+                            delay(pauseMs)
+                        } else {
+                            delay(frameDelayMs)
+                        }
+                        currentPart = 1
+                        currentFrameIndex = 0
+                    }
+                } else {
+                    val p1Frames = uiState.part1PreviewBitmaps
+                    if (p1Frames.isEmpty()) break
+                    delay(frameDelayMs)
+                    currentFrameIndex = (currentFrameIndex + 1) % p1Frames.size
+                }
+            } else {
+                val frames = uiState.previewBitmaps
+                if (frames.isEmpty()) break
+                delay(frameDelayMs)
                 currentFrameIndex = (currentFrameIndex + 1) % frames.size
             }
         }
@@ -623,6 +681,58 @@ private fun AnimationPreviewDialog(
                     )
                 }
 
+                if (isMultiPart) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = currentPart == 0,
+                            onClick = {
+                                currentPart = 0
+                                currentFrameIndex = 0
+                            },
+                            label = {
+                                Text(
+                                    stringResource(R.string.part0_badge),
+                                    fontWeight = if (currentPart == 0) FontWeight.Bold else FontWeight.Normal,
+                                    fontSize = 11.sp
+                                )
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                        FilterChip(
+                            selected = currentPart == 1,
+                            onClick = {
+                                currentPart = 1
+                                currentFrameIndex = 0
+                            },
+                            label = {
+                                Text(
+                                    stringResource(R.string.part1_badge),
+                                    fontWeight = if (currentPart == 1) FontWeight.Bold else FontWeight.Normal,
+                                    fontSize = 11.sp
+                                )
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Surface(
+                        color = if (currentPart == 0) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = if (currentPart == 0) stringResource(R.string.preview_playing_part0) else stringResource(R.string.preview_playing_part1),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (currentPart == 0) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(14.dp))
 
                 val canvasW = uiState.canvasWidth.toFloatOrNull() ?: 1080f
@@ -647,7 +757,7 @@ private fun AnimationPreviewDialog(
                             )
                         }
                     }
-                } else if (frames.isNotEmpty()) {
+                } else if (currentFrames.isNotEmpty()) {
                     Box(
                         modifier = Modifier
                             .heightIn(min = 200.dp, max = 300.dp)
@@ -658,7 +768,7 @@ private fun AnimationPreviewDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         Image(
-                            bitmap = frames[currentFrameIndex.coerceIn(0, frames.size - 1)].asImageBitmap(),
+                            bitmap = currentFrames[currentFrameIndex.coerceIn(0, currentFrames.size - 1)].asImageBitmap(),
                             contentDescription = "Preview Frame",
                             modifier = Modifier.fillMaxSize()
                         )
@@ -667,7 +777,7 @@ private fun AnimationPreviewDialog(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
-                        text = stringResource(R.string.preview_frame_indicator, currentFrameIndex + 1, frames.size),
+                        text = stringResource(R.string.preview_frame_indicator, currentFrameIndex + 1, currentFrames.size),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary
@@ -675,26 +785,50 @@ private fun AnimationPreviewDialog(
 
                     // Scrubber Slider
                     Slider(
-                        value = currentFrameIndex.toFloat().coerceIn(0f, maxOf(0f, (frames.size - 1).toFloat())),
+                        value = currentFrameIndex.toFloat().coerceIn(0f, maxOf(0f, (currentFrames.size - 1).toFloat())),
                         onValueChange = {
                             isPlaying = false
-                            currentFrameIndex = it.toInt().coerceIn(0, frames.size - 1)
+                            currentFrameIndex = it.toInt().coerceIn(0, currentFrames.size - 1)
                         },
-                        valueRange = 0f..maxOf(1f, (frames.size - 1).toFloat()),
-                        enabled = frames.size > 1,
+                        valueRange = 0f..maxOf(1f, (currentFrames.size - 1).toFloat()),
+                        enabled = currentFrames.size > 1,
                         modifier = Modifier.fillMaxWidth()
                     )
 
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        if (isMultiPart) {
+                            FilledTonalButton(
+                                onClick = {
+                                    currentPart = 0
+                                    currentFrameIndex = 0
+                                    isPlaying = true
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    stringResource(R.string.restart_boot_preview),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+
                         IconButton(
                             onClick = {
                                 isPlaying = false
-                                currentFrameIndex = if (currentFrameIndex > 0) currentFrameIndex - 1 else frames.size - 1
+                                currentFrameIndex = if (currentFrameIndex > 0) currentFrameIndex - 1 else currentFrames.size - 1
                             },
-                            enabled = frames.size > 1
+                            enabled = currentFrames.size > 1
                         ) {
                             Icon(
                                 imageVector = SkipPreviousIcon,
@@ -722,9 +856,9 @@ private fun AnimationPreviewDialog(
                         IconButton(
                             onClick = {
                                 isPlaying = false
-                                currentFrameIndex = (currentFrameIndex + 1) % frames.size
+                                currentFrameIndex = (currentFrameIndex + 1) % currentFrames.size
                             },
-                            enabled = frames.size > 1
+                            enabled = currentFrames.size > 1
                         ) {
                             Icon(
                                 imageVector = SkipNextIcon,

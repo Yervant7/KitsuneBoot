@@ -73,11 +73,35 @@
     <!-- Multi-Part Mode -->
     <string name="multi_part_switch_title">Animação em Múltiplas Partes (Intro + Loop)</string>
     <string name="multi_part_desc" tools:ignore="Typos">Divide em part0 (Introdução, 1 vez) e part1 (Loop Contínuo).</string>
+    <string name="multi_part_source_label">Origem dos Vídeos</string>
+    <string name="dual_video_mode">Dois Vídeos (Intro + Loop)</string>
+    <string name="single_video_split_mode">Vídeo Único (Fatiar)</string>
+    <string name="intro_video_card_title">Vídeo de Intro (part0)</string>
+    <string name="loop_video_card_title">Vídeo de Loop (part1)</string>
+    <string name="loop_video_section_title">Vídeo de Loop (part1)</string>
+    <string name="loop_video_section_optional">Opcional</string>
+    <string name="loop_video_section_desc">Se definido, este vídeo toca em loop contínuo após a introdução. Caso não seja informado, o vídeo principal é dividido automaticamente em intro + loop usando o modo Multi-Parte na Etapa 3.</string>
+    <string name="choose_loop_video_button">Escolher Vídeo de Loop</string>
+    <string name="change_loop_video_button">Trocar Vídeo de Loop</string>
+    <string name="drop_loop_video_hint">Toque para selecionar um vídeo diferente para o loop (MP4, WebM, MKV)</string>
     <string name="split_point_label">Ponto de Divisão: %1$.1fs (Parte 0: %2$.1fs – %3$.1fs | Parte 1: %4$.1fs – %5$.1fs)</string>
     <string name="part0_badge">Parte 0 (Intro)</string>
     <string name="part1_badge">Parte 1 (Loop)</string>
     <string name="part0_loop_label">Repetição Parte 0 (1=uma vez)</string>
     <string name="part1_loop_label">Repetição Parte 1 (0=infinito)</string>
+    <string name="ping_pong_loop_title">Loop Ping-Pong (Vai e Volta)</string>
+    <string name="ping_pong_loop_desc">Gera frames reversos para criar um loop contínuo e sem corte brusco</string>
+    <string name="pause_seconds_label">Pausa após a Intro</string>
+    <string name="pause_seconds_hint">Mantém o último quadro da part0 antes de iniciar a part1</string>
+    <string name="pause_seconds_value">%1$.1fs (%2$d quadros)</string>
+    <string name="crossfade_title">Transição Suave (Crossfade)</string>
+    <string name="crossfade_desc">Mescla o final da Intro com o início do Loop</string>
+    <string name="crossfade_frames_label">Duração do Crossfade (%1$d quadros)</string>
+    <string name="part_diagnostics_title">Análise das Partes &amp; Memória</string>
+    <string name="part0_diagnostics_badge">part0: %1$d quadros (~%2$.1fs)</string>
+    <string name="part1_diagnostics_badge">part1: %1$d quadros (~%2$.1fs)</string>
+    <string name="loop_warning_too_long">Atenção: O Loop (part1) ultrapassa 150 quadros. Loops muito longos podem consumir excesso de RAM e causar travamento do Android durante o boot.</string>
+    <string name="error_select_loop_video">Selecione o vídeo de loop para a part1</string>
 
     <!-- Step 4: Formatting & Quality -->
     <string name="step_4_title">Formato &amp; Cor de Fundo</string>
@@ -113,6 +137,9 @@
     <string name="preview_frame_indicator">Quadro %1$d / %2$d</string>
     <string name="play_preview">Reproduzir</string>
     <string name="pause_preview">Pausar</string>
+    <string name="preview_playing_part0">Reproduzindo: Intro (part0)</string>
+    <string name="preview_playing_part1">Reproduzindo: Loop (part1)</string>
+    <string name="restart_boot_preview">Reiniciar Boot</string>
     <string name="no_preview_frames">Nenhum quadro disponível para pré-visualização.</string>
     <string name="close_button">Fechar</string>
 

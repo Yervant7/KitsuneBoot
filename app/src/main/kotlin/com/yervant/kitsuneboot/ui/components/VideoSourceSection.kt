@@ -20,6 +20,7 @@
 
 package com.yervant.kitsuneboot.ui.components
 
+import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -51,6 +52,9 @@ fun VideoSourceSection(
     onChooseVideo: () -> Unit,
     onTrimRangeChanged: (Long, Long) -> Unit,
     onRotationChanged: (Int) -> Unit,
+    onChooseLoopVideo: () -> Unit = {},
+    onLoopTrimRangeChanged: (Long, Long) -> Unit = { _, _ -> },
+    onLoopRotationChanged: (Int) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     SectionCard(
@@ -59,62 +63,213 @@ fun VideoSourceSection(
         subtitle = stringResource(R.string.step_1_subtitle),
         modifier = modifier
     ) {
-        if (uiState.videoUri == null) {
+        // Main Video Slot (always visible)
+        VideoCardSlot(
+            slotTitle = null,
+            badgeText = null,
+            videoUri = uiState.videoUri,
+            videoName = uiState.videoName,
+            videoDurationMs = uiState.videoDurationMs,
+            videoStartMs = uiState.videoStartMs,
+            videoEndMs = uiState.videoEndMs,
+            rotationDegrees = uiState.rotationDegrees,
+            detectedFps = uiState.detectedFps,
+            canvasWidth = uiState.canvasWidth,
+            canvasHeight = uiState.canvasHeight,
+            isGenerating = uiState.isGenerating,
+            onChooseVideo = onChooseVideo,
+            onTrimRangeChanged = onTrimRangeChanged,
+            onRotationChanged = onRotationChanged,
+            chooseButtonText = stringResource(R.string.choose_video_button),
+            dropHintText = stringResource(R.string.drop_video_hint)
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // Loop Video Section Divider — always visible, clearly marked Optional
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = stringResource(R.string.loop_video_section_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Surface(
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.loop_video_section_optional),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.loop_video_section_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Loop Video Card Slot
+        VideoCardSlot(
+            slotTitle = null,
+            badgeText = stringResource(R.string.part1_badge),
+            videoUri = uiState.loopVideoUri,
+            videoName = uiState.loopVideoName,
+            videoDurationMs = uiState.loopVideoDurationMs,
+            videoStartMs = uiState.loopVideoStartMs,
+            videoEndMs = uiState.loopVideoEndMs,
+            rotationDegrees = uiState.loopRotationDegrees,
+            detectedFps = uiState.loopDetectedFps,
+            canvasWidth = uiState.canvasWidth,
+            canvasHeight = uiState.canvasHeight,
+            isGenerating = uiState.isGenerating,
+            onChooseVideo = onChooseLoopVideo,
+            onTrimRangeChanged = onLoopTrimRangeChanged,
+            onRotationChanged = onLoopRotationChanged,
+            chooseButtonText = stringResource(R.string.choose_loop_video_button),
+            dropHintText = stringResource(R.string.drop_loop_video_hint),
+            isOptional = true
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun VideoCardSlot(
+    slotTitle: String?,
+    badgeText: String?,
+    videoUri: Uri?,
+    videoName: String,
+    videoDurationMs: Long,
+    videoStartMs: Long,
+    videoEndMs: Long,
+    rotationDegrees: Int,
+    detectedFps: Float?,
+    canvasWidth: String,
+    canvasHeight: String,
+    isGenerating: Boolean,
+    onChooseVideo: () -> Unit,
+    onTrimRangeChanged: (Long, Long) -> Unit,
+    onRotationChanged: (Int) -> Unit,
+    chooseButtonText: String,
+    dropHintText: String,
+    isOptional: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        if (slotTitle != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = slotTitle,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                if (badgeText != null) {
+                    SuggestionChip(
+                        onClick = {},
+                        label = { Text(badgeText, fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+        }
+
+        if (videoUri == null) {
             // Empty State Dropzone
+            val borderColor = if (isOptional) {
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+            } else {
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+            }
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(18.dp))
-                    .clickable(enabled = !uiState.isGenerating, onClick = onChooseVideo),
+                    .clickable(enabled = !isGenerating, onClick = onChooseVideo),
                 color = MaterialTheme.colorScheme.surfaceContainer,
-                border = BorderStroke(
-                    1.5.dp,
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                ),
+                border = BorderStroke(1.5.dp, borderColor),
                 shape = RoundedCornerShape(18.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(28.dp),
+                        .padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(60.dp)
-                            .clip(RoundedCornerShape(18.dp))
-                            .background(MaterialTheme.colorScheme.primaryContainer),
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(
+                                if (isOptional) MaterialTheme.colorScheme.surfaceContainerHigh
+                                else MaterialTheme.colorScheme.primaryContainer
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.PlayArrow,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(34.dp)
+                            tint = if (isOptional) MaterialTheme.colorScheme.onSurfaceVariant
+                                   else MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(26.dp)
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     Text(
-                        text = stringResource(R.string.choose_video_button),
+                        text = chooseButtonText,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        color = if (isOptional) MaterialTheme.colorScheme.onSurfaceVariant
+                                else MaterialTheme.colorScheme.primary
                     )
+
+                    if (badgeText != null) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = badgeText,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    }
 
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
-                        text = stringResource(R.string.drop_video_hint),
+                        text = dropHintText,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
         } else {
-            // Selected Video Header Card
+            // Selected Video Card
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 color = MaterialTheme.colorScheme.surfaceContainer,
@@ -145,7 +300,7 @@ fun VideoSourceSection(
 
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = uiState.videoName,
+                                text = videoName,
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -153,11 +308,11 @@ fun VideoSourceSection(
                                 overflow = TextOverflow.Ellipsis
                             )
 
-                            if (uiState.videoDurationMs > 0) {
-                                val totalSec = uiState.videoDurationMs / 1000.0
+                            if (videoDurationMs > 0) {
+                                val totalSec = videoDurationMs / 1000.0
                                 Text(
-                                    text = "${String.format(java.util.Locale.US, "%.1f", totalSec)}s • ${uiState.canvasWidth}×${uiState.canvasHeight}" +
-                                            (uiState.detectedFps?.let { " • ${it.toInt()} FPS" } ?: ""),
+                                    text = "${String.format(java.util.Locale.US, "%.1f", totalSec)}s • $canvasWidth×$canvasHeight" +
+                                            (detectedFps?.let { " • ${it.toInt()} FPS" } ?: ""),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -166,7 +321,7 @@ fun VideoSourceSection(
 
                         OutlinedButton(
                             onClick = onChooseVideo,
-                            enabled = !uiState.isGenerating,
+                            enabled = !isGenerating,
                             shape = RoundedCornerShape(10.dp),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                         ) {
@@ -178,15 +333,15 @@ fun VideoSourceSection(
                 }
             }
 
-            // Trimming & Rotation (Visible when video has duration)
+            // Trimming & Rotation
             AnimatedVisibility(
-                visible = uiState.videoDurationMs > 0,
+                visible = videoDurationMs > 0,
                 enter = fadeIn(),
                 exit = fadeOut()
             ) {
-                Column(modifier = Modifier.padding(top = 16.dp)) {
-                    val startSec = uiState.videoStartMs / 1000.0
-                    val endSec = uiState.videoEndMs / 1000.0
+                Column(modifier = Modifier.padding(top = 12.dp)) {
+                    val startSec = videoStartMs / 1000.0
+                    val endSec = videoEndMs / 1000.0
                     val activeSec = maxOf(0.0, endSec - startSec)
 
                     Row(
@@ -219,9 +374,9 @@ fun VideoSourceSection(
                         )
                     }
 
-                    val maxDuration = maxOf(1f, uiState.videoDurationMs.toFloat())
-                    val rangeStart = uiState.videoStartMs.toFloat().coerceIn(0f, maxDuration)
-                    val rangeEnd = uiState.videoEndMs.toFloat().coerceIn(rangeStart, maxDuration)
+                    val maxDuration = maxOf(1f, videoDurationMs.toFloat())
+                    val rangeStart = videoStartMs.toFloat().coerceIn(0f, maxDuration)
+                    val rangeEnd = videoEndMs.toFloat().coerceIn(rangeStart, maxDuration)
 
                     RangeSlider(
                         value = rangeStart..rangeEnd,
@@ -229,19 +384,19 @@ fun VideoSourceSection(
                             onTrimRangeChanged(range.start.toLong(), range.endInclusive.toLong())
                         },
                         valueRange = 0f..maxDuration,
-                        enabled = !uiState.isGenerating
+                        enabled = !isGenerating
                     )
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     Text(
                         text = stringResource(R.string.rotation_title),
-                        style = MaterialTheme.typography.labelLarge,
+                        style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
 
                     val rotationOptions = listOf(
                         0 to R.string.rotation_0,
@@ -252,16 +407,16 @@ fun VideoSourceSection(
 
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                         rotationOptions.forEachIndexed { index, (deg, labelRes) ->
-                            val isSelected = uiState.rotationDegrees == deg
+                            val isSelected = rotationDegrees == deg
                             SegmentedButton(
                                 selected = isSelected,
                                 onClick = { onRotationChanged(deg) },
                                 shape = SegmentedButtonDefaults.itemShape(index = index, count = rotationOptions.size),
-                                enabled = !uiState.isGenerating
+                                enabled = !isGenerating
                             ) {
                                 Text(
                                     text = stringResource(labelRes),
-                                    fontSize = 13.sp,
+                                    fontSize = 12.sp,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                                 )
                             }
